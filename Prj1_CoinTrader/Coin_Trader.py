@@ -43,58 +43,71 @@ df = pyupbit.get_ohlcv("KRW-BTC")
 df_min = pyupbit.get_ohlcv(ticker = 'KRW-BTC',interval='minute1',count =1000)
 # print(len(df_min))
 
+# ## 필요 함수 생성
+
 # +
 #데이터 수집 API호출
 def fnc_get_coinData_min(str_coin, str_start, str_end, unit):
+    
 
-  url = "https://api.upbit.com/v1/candles/minutes/" + str(unit)
-  df_coin = pd.DataFrame()
+    url = "https://api.upbit.com/v1/candles/minutes/" + str(unit)
+    df_coin = pd.DataFrame()
 
-  #querystring = {"market":"KRW-BTC","count":"200","to":str_endTime}
-  dt_start = datetime.datetime.strptime(str_start, '%Y-%m-%d %H:%M:%S')
-  dt_end = datetime.datetime.strptime(str_end, '%Y-%m-%d %H:%M:%S')
-  dt_current = dt_start
-  while dt_current < dt_end:
+    #querystring = {"market":"KRW-BTC","count":"200","to":str_endTime}
+    dt_start = datetime.datetime.strptime(str_start, '%Y-%m-%d %H:%M:%S')
+    dt_end = datetime.datetime.strptime(str_end, '%Y-%m-%d %H:%M:%S')
+    dt_current = dt_start
+    while dt_current < dt_end:
+        print(dt_current.strftime('%Y-%m-%d %H:%M:%S')+' ~ '+(dt_current + datetime.timedelta(minutes = 200)).strftime('%Y-%m-%d %H:%M:%S'))
+        dt_current = dt_current + datetime.timedelta(minutes = 200)
 
-    print(dt_current.strftime('%Y-%m-%d %H:%M:%S') + ' ~ '+ (dt_current + datetime.timedelta(minutes = 200)).strftime('%Y-%m-%d %H:%M:%S') )
-    dt_current = dt_current + datetime.timedelta(minutes = 200)
+        if dt_current > dt_end:
+            dt_current = dt_end
 
-    if dt_current > dt_end:
-      dt_current = dt_end
-
-    querystring = {"market":str_coin,"count":200, "to":dt_current.strftime('%Y-%m-%d %H:%M:%S')}
-    response = requests.request("GET", url, params=querystring)
-    df_result = pd.json_normalize(response.json())
-    df_coin = pd.concat([df_coin,df_result],ignore_index=True)
-    print(len(df_coin))
+        querystring = {"market":str_coin,"count":200, "to":dt_current.strftime('%Y-%m-%d %H:%M:%S')}
+        response = requests.request("GET", url, params=querystring)
+        try:
+            df_result = pd.json_normalize(response.json())
+        except:
+            print("API Connection Error")
+            dt_current = dt_current - datetime.timedelta(minutes = 200)
+            continue
+                
+        df_coin = pd.concat([df_coin,df_result],ignore_index=True)
+        print(len(df_coin))
   
-  return df_coin
+    return df_coin
 
 def fnc_plot_mResult(history):
-  acc = history.history['accuracy']
-  val_acc =history.history['val_accuracy']
+    acc = history.history['accuracy']
+    val_acc =history.history['val_accuracy']
 
-  loss = history.history['loss']
-  val_loss = history.history['val_loss']
-
-
-  plt.plot(acc)
-  plt.plot(val_acc)
-  plt.legend(['Acc', 'Val_Acc'])
-  plt.show()
+    loss = history.history['loss']
+    val_loss = history.history['val_loss']
 
 
-  plt.plot(loss)
-  plt.plot(val_loss)
+    plt.plot(acc)
+    plt.plot(val_acc)
+    plt.legend(['Acc', 'Val_Acc'])
+    plt.show()
 
-  plt.legend(['Loss', 'Val_Loss'])
-  plt.show()
+
+    plt.plot(loss)
+    plt.plot(val_loss)
+
+    plt.legend(['Loss', 'Val_Loss'])
+    plt.show()
 
 
-# df_coin = fnc_get_coinData_min("KRW-BTC","2017-12-05 00:00:00", "2021-02-01 00:00:00",10)
-# df_coin = df_coin.sort_values(by='candle_date_time_utc', axis=0)
-# df_coin.to_csv('df_coin.csv')
+df_coin = fnc_get_coinData_min("KRW-BTC","2017-12-07 00:00:00", "2021-02-01 00:00:00",10)
+df_coin = df_coin.sort_values(by='candle_date_time_utc', axis=0)
+df_coin.to_csv('df_coin.csv')
 
+
+# -
+
+
+# ## 1.LSTM with 6hour price pattern(using only price data)
 
 # +
 #데이터 전처리_LSTM feature: 10분단위 6시간 가격데이터 
@@ -204,7 +217,10 @@ plt.plot(Test_y*scaling_value)
 plt.plot(pred_test_y*scaling_value)
 plt.legend(['Test_y','Pred_y'])
 plt.show()
+# -
 
+
+# ## 2.LSTM with 6hour price change pattern(using only price change data)
 
 # +
 #데이터 전처리_LSTM feature: 10분단위 가격 변화량 데이터
@@ -223,7 +239,7 @@ df_coin['price_chage'] = df_coin['trade_price'] - df_coin['trade_price'].shift(1
 
 print(df_coin.head(100))
 
-scaling_value =10000
+scaling_value =100
 df_coin['price_chage'] = df_coin['price_chage']/scaling_value #data scaling
 df_coin['label'] = df_coin['price_chage'].shift(-1)
 # df_coin = df_coin.set_index('candle_date_time_kst')
@@ -328,13 +344,27 @@ pred_test_y = model_lstm.predict(Test_x)
 
 plt.plot(Tr_real_y)
 plt.plot(Tr_real_x+(pred_train_y*scaling_value))
-plt.legend(['Train_y','Pred_y'])
+plt.legend(['Train_real_y','Pred_real_y'])
 plt.show()
 
 plt.plot(Ts_real_y)
 plt.plot(Ts_real_x+(pred_test_y*scaling_value))
+plt.legend(['Test_real_y','Pred_real_y'])
+plt.show()
+
+
+plt.plot(Train_y*scaling_value)
+plt.plot(pred_train_y*scaling_value)
+plt.legend(['Train_y','Pred_y'])
+plt.show()
+
+plt.plot(Test_y*scaling_value)
+plt.plot(pred_test_y*scaling_value)
 plt.legend(['Test_y','Pred_y'])
 plt.show()
+# -
+
+# ## 3.CNN 
 
 # +
 #데이터 전처리_CNN feature: 10분단위 6시간 가격데이터 
