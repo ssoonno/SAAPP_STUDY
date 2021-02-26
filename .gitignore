@@ -1,3 +1,4 @@
 #Ignore ipynb files
 *.ipynb
 *.csv
+*.npy

@@ -28,6 +28,7 @@ import requests
 import datetime
 import pandas as pd
 import tensorflow as tf
+import numpy as np
 from matplotlib import pyplot as plt
 
 #API 테스트
@@ -99,15 +100,17 @@ def fnc_plot_mResult(history):
     plt.show()
 
 
-df_coin = fnc_get_coinData_min("KRW-BTC","2017-12-07 00:00:00", "2021-02-01 00:00:00",10)
-df_coin = df_coin.sort_values(by='candle_date_time_utc', axis=0)
-df_coin.to_csv('df_coin.csv')
+# df_coin = fnc_get_coinData_min("KRW-BTC","2017-12-07 00:00:00", "2021-02-01 00:00:00",10)
+# df_coin = df_coin.sort_values(by='candle_date_time_utc', axis=0)
+# df_coin.to_csv('df_coin.csv')
 
 
 # -
 
 
 # ## 1.LSTM with 6hour price pattern(using only price data)
+# #### 1. 사용 feature : 과거 6시간의 10분단위 가격데이터(35 컬럼)
+# #### 2. 로직 : 6시간의 가격데이터 패턴으로 10분뒤 가격 예측
 
 # +
 #데이터 전처리_LSTM feature: 10분단위 6시간 가격데이터 
@@ -221,10 +224,14 @@ plt.show()
 
 
 # ## 2.LSTM with 6hour price change pattern(using only price change data)
+# #### 가격데이터만으로 예측을 진행할 경우 과거 학습하지 못한 더높은 가격의 경우 예측하지 못하는 현상 발생
+# #### 1. 사용 feature : 과거 6시간의 10분단위 가격 변동 데이터(35 컬럼)
+# #### 2. 로직 : 6시간의 가격변동 데이터 패턴으로 10분뒤 가격의 변동성 예측
+#
 
 # +
 #데이터 전처리_LSTM feature: 10분단위 가격 변화량 데이터
-#가격데이터로 예측시 과거 존재하지 않았던 높은/낮은 가격일경우 에측하지 못하는 문제 발생 
+#가격데이터로 예측시 과거 존재하지 않았던 높은/낮은 가격일경우 에측하지 못하는 문제 발생하여 가격 변화량 데이터 사용
 #Raw 데이터 불러오기
 df_coin = pd.read_csv("df_coin.csv")
 # print(len(df_coin))
@@ -307,7 +314,8 @@ print(Test_x.shape)
 #모델 생성
 K.clear_session()
 model_lstm = Sequential() # Sequeatial Model
-model_lstm.add(LSTM(40, input_shape=(36, 1))) # (timestep, feature)
+model_lstm.add(LSTM(36, input_shape=(36, 1))) # (timestep, feature)
+# model_lstm.add(Dense(1,activation='relu')) # output = 1
 model_lstm.add(Dense(1)) # output = 1
 model_lstm.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
 
@@ -373,36 +381,90 @@ df_coin = pd.read_csv("df_coin.csv")
 print(len(df_coin))
 df_coin = df_coin.sort_values('candle_date_time_kst') #시간순 정렬
 df_coin = df_coin.reset_index(drop = True)
-print(df_coin.head(10))
-print(df_coin.columns)
+# print(df_coin.head(10))
+# print(df_coin.columns)
 
 
-# df_coin = df_coin[['candle_date_time_kst','trade_price']]
-# df_coin['trade_price'] = df_coin['trade_price']/100000 #data scaling
-# df_coin['label'] = df_coin['trade_price'].shift(-1)
-# # df_coin = df_coin.set_index('candle_date_time_kst')
-# # print(df_coin.head(100))
+df_coin = df_coin[['opening_price', 'high_price', 'low_price', 'trade_price','candle_acc_trade_price', 'candle_acc_trade_volume']]
+df_y = df_coin[['trade_price']].shift(-1)
 
-# #lstm 학습 기준시간 6시간 (data shift 6hour ) 
-# for s in range(1, 36):
-#     df_coin['shift_{}'.format(s)] = df_coin['trade_price'].shift(s)
-# df_coin =df_coin.dropna() #na데이터 제거 
-# df_coin = df_coin[37:] #dropna가 먹히지 않아 na데이터 수동 삭제
-# # print(df_coin.head(100))
-# # print(df_coin.tail(100))
+lst_result = []
+lst_y1 = []
+lst_y2 = []
+for i in range(0,len(df_coin)-35):
+    if i % 10000==0:
+        print("Process :"+str( (100*((i+1)/len(df_coin))) )+"("+str(i+1)+"/"+str(len(df_coin))+")") #진행상태 확인
+        
+    df_tmp = df_coin.iloc[i:i+35]
+    lst_result.append(df_tmp.transpose().values)
+#     lst_y1.append(df_y.transpose().iloc[i:i+35])
+    lst_y1.append(df_y.iloc[i:i+35].transpose().values)
+    lst_y2.append(df_y.iloc[i])
+    
+print("PREPROCESS END")
+x_data = np.array(lst_result)
+y_data1 = np.array(lst_y1)
+y_data2 = np.array(lst_y2)
+print(x_data.shape)
+print(y_data1.shape) # 다음 6시간(35 step)예측
+print(y_data2.shape) # 10분뒤(1step) 예측
 
-# #Split Train/Test Data
-# max_len = len(df_coin)
-# print(max_len)
-# df_coin_train = df_coin.loc[:int(max_len*0.7)] #Train 70% data
-# df_coin_test = df_coin[int(max_len*0.7):(max_len-1)] #Test 30% data
-
-
-# df_train_x = df_coin_train.drop(['label','candle_date_time_kst'],axis = 1)
-# df_train_y = df_coin_train[['label']]
-
-# df_test_x = df_coin_test.drop(['label','candle_date_time_kst'],axis = 1)
-# df_test_y = df_coin_test[['label']]
+#전처리 데이터 저장
+np.save('x_data',x_data)
+np.save('y_data1',y_data1)
+np.save('y_data2',y_data2)
 # -
+# ### 3-1 CNN 6시간 예측
+
+# +
+#Train/Test 분리
+max_len = len(x_data)
+df_coin_train = x_data[:int(max_len*0.7)] #Train 70% data
+df_coin_test = x_data[int(max_len*0.7):(max_len-1)] #Test 30% data
+
+df_result_train = y_data1[:int(max_len*0.7)] #Train 70% data
+df_result_test = y_data1[int(max_len*0.7):(max_len-1)] #Test 30% data
+
+print(df_coin_train.shape)
+print(df_coin_test.shape)
+print(df_result_train.shape)
+print(df_result_test.shape)
+
+
+
+# +
+#modeling_CNN  
+from tensorflow.keras.models import Sequential 
+from tensorflow.keras.layers import Dense 
+import tensorflow.keras.backend as K 
+from tensorflow.keras.layers import Dense, Conv2D, MaxPooling2D, Dropout, Flatten
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+from tensorflow.keras.models import load_model
+
+EPOCHS = 100
+BATCH_SIZE = 500
+
+dt_rows = 6
+dt_cols = 35
+
+input_shape = (dt_rows, dt_cols, 1)
+x_train = df_coin_train.reshape(df_coin_train.shape[0], dt_rows, dt_cols, 1)
+x_test = df_coin_test.reshape(df_coin_test.shape[0], dt_rows, dt_cols, 1)
+
+model = Sequential()
+model.add(Conv2D(32, kernel_size=(3,3), input_shape =(dt_rows, dt_cols, 1), activation='relu'))
+model.add(Conv2D(64, kernel_size=(3,3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2,2)))
+model.add(Flatten())
+model.add(Dense(128,activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(35,activation='softmax'))
+print(model)
+
+
+# -
+
+
+
 
 
