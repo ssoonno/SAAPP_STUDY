@@ -410,20 +410,27 @@ print(y_data1.shape) # 다음 6시간(35 step)예측
 print(y_data2.shape) # 10분뒤(1step) 예측
 
 #전처리 데이터 저장
-np.save('x_data',x_data)
-np.save('y_data1',y_data1)
-np.save('y_data2',y_data2)
+np.save('x_cnn_data',x_data)
+np.save('y_cnn_data1',y_data1)
+np.save('y_cnn_data2',y_data2)
 # -
-# ### 3-1 CNN 6시간 예측
+# ### 3-1 CNN 10분뒤 예측
 
 # +
+#Data 로드
+x_data = np.load('x_cnn_data.npy')
+y_data1 = np.load('y_cnn_data1.npy')
+y_data2= np.load('y_cnn_data2.npy')
+
 #Train/Test 분리
 max_len = len(x_data)
 df_coin_train = x_data[:int(max_len*0.7)] #Train 70% data
 df_coin_test = x_data[int(max_len*0.7):(max_len-1)] #Test 30% data
 
-df_result_train = y_data1[:int(max_len*0.7)] #Train 70% data
-df_result_test = y_data1[int(max_len*0.7):(max_len-1)] #Test 30% data
+# df_result_train = y_data1[:int(max_len*0.7)] #Train 70% data
+# df_result_test = y_data1[int(max_len*0.7):(max_len-1)] #Test 30% data
+df_result_train = y_data2[:int(max_len*0.7)] #Train 70% data
+df_result_test = y_data2[int(max_len*0.7):(max_len-1)] #Test 30% data
 
 print(df_coin_train.shape)
 print(df_coin_test.shape)
@@ -444,27 +451,65 @@ from tensorflow.keras.models import load_model
 EPOCHS = 100
 BATCH_SIZE = 500
 
-dt_rows = 6
-dt_cols = 35
+dt_rows = 6 #feature종류
+dt_cols = 35 #timestep
 
 input_shape = (dt_rows, dt_cols, 1)
 x_train = df_coin_train.reshape(df_coin_train.shape[0], dt_rows, dt_cols, 1)
 x_test = df_coin_test.reshape(df_coin_test.shape[0], dt_rows, dt_cols, 1)
 
-model = Sequential()
-model.add(Conv2D(32, kernel_size=(3,3), input_shape =(dt_rows, dt_cols, 1), activation='relu'))
-model.add(Conv2D(64, kernel_size=(3,3), activation='relu'))
-model.add(MaxPooling2D(pool_size=(2,2)))
-model.add(Flatten())
-model.add(Dense(128,activation='relu'))
-model.add(Dropout(0.5))
-model.add(Dense(35,activation='softmax'))
-print(model)
+# y_train = df_result_train.reshape(df_result_train.shape[0],1,dt_cols)
+# y_test = df_result_test.reshape(df_result_test.shape[0],1,dt_cols)
+
+y_train = df_result_train
+y_train = df_result_test
+
+
+model_cnn = Sequential()
+model_cnn.add(Conv2D(32,  kernel_size=(1,1), input_shape =(dt_rows, dt_cols, 1)))
+# model_cnn.add(Conv2D(32, kernel_size=(3,3), input_shape =(dt_rows, dt_cols, 1), activation='relu'))
+model_cnn.add(Conv2D(64, kernel_size=(3,3), activation='relu'))
+model_cnn.add(MaxPooling2D(pool_size=(2,2)))
+model_cnn.add(Flatten())
+model_cnn.add(Dense(128,activation='relu'))
+model_cnn.add(Dense(257,activation='relu'))
+model_cnn.add(Dense(128,activation='relu'))
+model_cnn.add(Dropout(0.5))
+model_cnn.add(Dense(1))
+
+print(model_cnn.summary())
 
 
 # -
 
 
+model_cnn.compile(loss='mean_squared_logarithmic_error', optimizer='adam', metrics=['accuracy'])
+# model_cnn.compile(optimizer='adam')
+early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
+history_cnn = model_cnn.fit(x_train,y_train, batch_size=BATCH_SIZE, epochs=EPOCHS,verbose=1, callbacks=[early_stop])
+fnc_plot_mResult(history)
 
+
+# +
+#모델 로드
+#reconstructed_model = tf.keras.models.load_model("my_model")
+#예측 결과 확인
+pred_train_y = model_cnn.predict(x_train)
+pred_test_y = model_cnn.predict(x_test)
+# print(Train_y)
+# print(pred_train_y)
+
+plt.plot(y_train*scaling_value)
+plt.plot(pred_train_y*scaling_value)
+plt.legend(['Train_y','Pred_y'])
+plt.show()
+
+plt.plot(y_train*scaling_value)
+plt.plot(pred_test_y*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.show()
+# -
+
+Train_y
 
 
