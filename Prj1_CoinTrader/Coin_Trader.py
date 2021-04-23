@@ -112,6 +112,12 @@ def fnc_plot_mResult(history):
 # #### 1. 사용 feature : 과거 6시간의 10분단위 가격데이터(35 컬럼)
 # #### 2. 로직 : 6시간의 가격데이터 패턴으로 10분뒤 가격 예측
 
+df_coin = pd.read_csv("df_coin.csv")
+# print(len(df_coin))
+df_coin = df_coin.sort_values('candle_date_time_kst') #시간순 정렬
+df_coin = df_coin.reset_index(drop = True)
+
+
 # +
 #데이터 전처리_LSTM feature: 10분단위 6시간 가격데이터 
 #Raw 데이터 불러오기
@@ -175,6 +181,7 @@ print(Train_x.shape)
 print(Train_y.shape)
 print(Test_x.shape)
 print(Test_y.shape)
+print(Train_x)
 
 #LSTM 데이터 형식으로 변환
 Train_x = Train_x.reshape(Train_x.shape[0],36,1)
@@ -227,6 +234,7 @@ plt.show()
 # #### 가격데이터만으로 예측을 진행할 경우 과거 학습하지 못한 더높은 가격의 경우 예측하지 못하는 현상 발생
 # #### 1. 사용 feature : 과거 6시간의 10분단위 가격 변동 데이터(35 컬럼)
 # #### 2. 로직 : 6시간의 가격변동 데이터 패턴으로 10분뒤 가격의 변동성 예측
+# #### -> 변동성 데이터는 0인 라벨을 줄이고 시계열 모델이 아닌 다른 모델로 접근해보자
 #
 
 # +
@@ -376,31 +384,273 @@ plt.show()
 
 # +
 #데이터 전처리_CNN feature: 10분단위 6시간 가격데이터 
+
+#단위 수정
+scaling_value =1000000
+
 #Raw 데이터 불러오기
 df_coin = pd.read_csv("df_coin.csv")
 print(len(df_coin))
 df_coin = df_coin.sort_values('candle_date_time_kst') #시간순 정렬
 df_coin = df_coin.reset_index(drop = True)
-# print(df_coin.head(10))
+print(df_coin.head(10))
+# print(df_coin.columns)
+df_coin[['opening_price', 'high_price', 'low_price', 'trade_price','candle_acc_trade_price']] = df_coin[['opening_price', 'high_price', 'low_price', 'trade_price','candle_acc_trade_price']]/scaling_value
+
+df_coin = df_coin[['opening_price', 'high_price', 'low_price', 'trade_price','candle_acc_trade_price', 'candle_acc_trade_volume']]
+# df_y = df_coin[['trade_price']].shift(-1)
+df_y = df_coin[['trade_price']]
+lst_result = []
+lst_y1 = []
+lst_y2 = []
+for i in range(35,len(df_coin)-6):
+
+    if  round(100*((i+1)/len(df_coin)))>round(100*((i)/len(df_coin))):
+        print("Process :"+str( round(100*((i+1)/len(df_coin)),2) )+"("+str(i+1)+"/"+str(len(df_coin))+")") #진행상태 확인
+        
+    df_tmp = df_coin.iloc[i-35:i-1]
+    lst_result.append(df_tmp.transpose().values)
+#     lst_y1.append(df_y.transpose().iloc[i:i+35])
+    lst_y1.append(df_y.iloc[i:i+6].transpose().values)
+    lst_y2.append(df_y.iloc[i])
+
+
+print("PREPROCESS END")
+x_data = np.array(lst_result)
+y_data1 = np.array(lst_y1)
+y_data2 = np.array(lst_y2)
+print(x_data.shape)
+print(y_data1.shape) # 다음 1시간(6 step)예측
+print(y_data2.shape) # 10분뒤(1step) 예측
+
+#전처리 데이터 저장
+np.save('x_cnn_data',x_data)
+np.save('y_cnn_data1',y_data1)
+np.save('y_cnn_data2',y_data2)
+# -
+# ### 3-1 CNN 10분뒤 예측 (추세는 예측하나 상승, 하강 시점을 못잡음)
+
+# +
+#단위 수정
+scaling_value =1000000
+
+#Data 로드
+x_data = np.load('x_cnn_data.npy')
+y_data1 = np.load('y_cnn_data1.npy')
+y_data2= np.load('y_cnn_data2.npy')
+
+#Train/Test 분리
+max_len = len(x_data)
+df_coin_train = x_data[:int(max_len*0.7)] #Train 70% data
+df_coin_test = x_data[int(max_len*0.7):(max_len-1)] #Test 30% data
+
+df_result_train_1h = y_data1[:int(max_len*0.7)] #Train 70% data
+df_result_test_1h = y_data1[int(max_len*0.7):(max_len-1)] #Test 30% data
+df_result_train = y_data2[:int(max_len*0.7)] #Train 70% data
+df_result_test = y_data2[int(max_len*0.7):(max_len-1)] #Test 30% data
+
+print(df_coin_train.shape)
+print(df_coin_test.shape)
+print(df_result_train.shape)
+print(df_result_test.shape)
+print(df_result_train_1h.shape)
+print(df_result_test_1h.shape)
+
+
+#modeling_CNN  
+from tensorflow.keras.models import Sequential 
+from tensorflow.keras.layers import Dense 
+import tensorflow.keras.backend as K 
+from tensorflow.keras.layers import Dense, Conv2D,Conv1D, MaxPooling2D, Dropout, Flatten
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+from tensorflow.keras.models import load_model
+
+EPOCHS = 100
+BATCH_SIZE = 500
+
+dt_rows = df_coin_train.shape[1] #feature종류
+dt_cols = df_coin_train.shape[2] #timestep
+
+input_shape = (dt_rows, dt_cols, 1)
+
+#Conv2D
+# x_train = df_coin_train.reshape(df_coin_train.shape[0], dt_rows, dt_cols, 1)
+# x_test = df_coin_test.reshape(df_coin_test.shape[0], dt_rows, dt_cols, 1)
+# y_train = df_result_train.reshape(df_result_train.shape[0],1,dt_cols)
+# y_test = df_result_test.reshape(df_result_test.shape[0],1,dt_cols)
+
+#Conv1D
+x_train = df_coin_train.reshape(df_coin_train.shape[0], dt_rows, dt_cols)
+x_test = df_coin_test.reshape(df_coin_test.shape[0], dt_rows, dt_cols)
+y_train = df_result_train
+y_test = df_result_test
+y_train_1h = df_result_train_1h.reshape(df_result_train_1h.shape[0],df_result_train_1h.shape[2])
+y_test_1h = df_result_test_1h.reshape(df_result_test_1h.shape[0],df_result_test_1h.shape[2])
+
+# model_cnn = Sequential()
+# model_cnn.add(Conv2D(32,  kernel_size=(3,3), input_shape =(dt_rows, dt_cols, 1),activation='relu'))
+# # model_cnn.add(MaxPooling2D(pool_size=(2,2)))
+# model_cnn.add(Conv2D(32, kernel_size=(3,3), activation='relu'))
+# model_cnn.add(MaxPooling2D(pool_size=(2,2)))
+# model_cnn.add(Flatten())
+# model_cnn.add(Dense(512,activation='relu'))
+# model_cnn.add(Dense(128,activation='relu'))
+# model_cnn.add(Dense(20,activation='relu'))
+# model_cnn.add(Dropout(0.5))
+# model_cnn.add(Dense(1))
+
+#10min forecast
+model_cnn = Sequential()
+model_cnn.add(Conv1D(32,  kernel_size=1, input_shape =(dt_rows, dt_cols),activation='relu'))
+model_cnn.add(Conv1D(32,  kernel_size=dt_rows,activation='relu'))
+model_cnn.add(Flatten())
+model_cnn.add(Dense(512,activation='relu'))
+model_cnn.add(Dropout(0.2))
+model_cnn.add(Dense(128,activation='relu'))
+model_cnn.add(Dense(1))
+
+print(model_cnn.summary())
+model_cnn.compile(loss='mean_squared_error', optimizer='adam', metrics=['mae'])
+# model_cnn.compile(optimizer='adam')
+early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
+history_cnn = model_cnn.fit(x_train,y_train,validation_data =(x_test, y_test), batch_size=BATCH_SIZE, epochs=EPOCHS,verbose=1, callbacks=[early_stop])
+# fnc_plot_mResult(history_cnn)
+
+plt.plot(history_cnn.history['loss'])
+plt.plot(history_cnn.history['val_loss'])
+plt.legend(['loss','val_loss'])
+plt.show()
+
+
+
+
+#1h forecast
+model_cnn_1h = Sequential()
+model_cnn_1h.add(Conv1D(32,  kernel_size=1, input_shape =(dt_rows, dt_cols),activation='relu'))
+model_cnn_1h.add(Conv1D(32,  kernel_size=dt_rows,activation='relu'))
+model_cnn_1h.add(Flatten())
+model_cnn_1h.add(Dense(512,activation='relu'))
+model_cnn_1h.add(Dropout(0.2))
+model_cnn_1h.add(Dense(128,activation='relu'))
+model_cnn_1h.add(Dense(6))
+
+print(model_cnn_1h.summary())
+model_cnn_1h.compile(loss=tf.keras.losses.MeanSquaredError(), optimizer=tf.keras.optimizers.Adam())
+early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
+history_cnn_1h = model_cnn_1h.fit(x_train,y_train_1h,validation_data =(x_test, y_test_1h), batch_size=BATCH_SIZE, epochs=EPOCHS)
+
+plt.plot(history_cnn_1h.history['loss'])
+plt.plot(history_cnn_1h.history['val_loss'])
+plt.legend(['loss','val_loss'])
+plt.show()
+
+
+
+# -
+
+
+pred_test_y = model_cnn.predict(x_test)
+pred_test_y.shape
+
+pred_test_y_1h.shape
+
+# +
+#모델 로드
+#reconstructed_model = tf.keras.models.load_model("my_model")
+#예측 결과 확인
+# pred_train_y = model_cnn.predict(x_train)
+pred_test_y = model_cnn.predict(x_test)
+# pred_train_y = model_cnn_1h.predict(x_train)
+pred_test_y_1h = model_cnn_1h.predict(x_test)
+print("Predict Complete!")a
+
+# plt.plot(y_train)
+# plt.plot(pred_train_y)
+# plt.legend(['Train_y','Pred_y'])
+# plt.title('10min forecast_train')
+# plt.show()
+
+plt.plot(y_test*scaling_value)
+plt.plot(pred_test_y*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('10min forecast_test')
+plt.show()
+
+
+plt.plot(y_test[29112:30627]*scaling_value)
+plt.plot(pred_test_y[29112:30627]*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('Problem_point_1')
+plt.show()
+
+
+plt.plot(y_test[432600:433537]*scaling_value)
+plt.plot(pred_test_y[432600:433537]*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('Problem_point_2')
+plt.show()
+
+
+
+plt.plot(y_test_1h*scaling_value)
+plt.plot(pred_test_y_1h*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('1h forecast_test')
+plt.show()
+
+
+plt.plot(y_test_1h[29112:30627]*scaling_value)
+plt.plot(pred_test_y_1h[29112:30627]*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('Problem_point_1')
+plt.show()
+
+
+plt.plot(y_test_1h[432600:433537]*scaling_value)
+plt.plot(pred_test_y_1h[432600:433537]*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('Problem_point_2')
+plt.show()
+
+
+
+# -
+
+# ### CNN 변화량 예측
+
+print(y_test_1h.tolist()[0])
+print(pred_test_y_1h.tolist()[0])
+
+# +
+#데이터 전처리_CNN feature: 10분단위 6시간 가격데이터 
+
+#Raw 데이터 불러오기
+df_coin = pd.read_csv("df_coin.csv")
+print(len(df_coin))
+df_coin = df_coin.sort_values('candle_date_time_kst') #시간순 정렬
+df_coin = df_coin.reset_index(drop = True)
+print(df_coin.head(10))
 # print(df_coin.columns)
 
 
 df_coin = df_coin[['opening_price', 'high_price', 'low_price', 'trade_price','candle_acc_trade_price', 'candle_acc_trade_volume']]
-df_y = df_coin[['trade_price']].shift(-1)
-
+# df_y = df_coin[['trade_price']].shift(-1)
+df_y = df_coin[['trade_price']]
 lst_result = []
 lst_y1 = []
 lst_y2 = []
-for i in range(0,len(df_coin)-35):
-    if i % 10000==0:
-        print("Process :"+str( (100*((i+1)/len(df_coin))) )+"("+str(i+1)+"/"+str(len(df_coin))+")") #진행상태 확인
+for i in range(35,len(df_coin)-6):
+
+    if  round(100*((i+1)/len(df_coin)))>round(100*((i)/len(df_coin))):
+        print("Process :"+str( round(100*((i+1)/len(df_coin)),2) )+"("+str(i+1)+"/"+str(len(df_coin))+")") #진행상태 확인
         
-    df_tmp = df_coin.iloc[i:i+35]
+    df_tmp = df_coin.iloc[i-35:i-1]
     lst_result.append(df_tmp.transpose().values)
 #     lst_y1.append(df_y.transpose().iloc[i:i+35])
-    lst_y1.append(df_y.iloc[i:i+35].transpose().values)
+    lst_y1.append(df_y.iloc[i:i+6].transpose().values)
     lst_y2.append(df_y.iloc[i])
-    
+
+
 print("PREPROCESS END")
 x_data = np.array(lst_result)
 y_data1 = np.array(lst_y1)
@@ -414,102 +664,5 @@ np.save('x_cnn_data',x_data)
 np.save('y_cnn_data1',y_data1)
 np.save('y_cnn_data2',y_data2)
 # -
-# ### 3-1 CNN 10분뒤 예측
-
-# +
-#Data 로드
-x_data = np.load('x_cnn_data.npy')
-y_data1 = np.load('y_cnn_data1.npy')
-y_data2= np.load('y_cnn_data2.npy')
-
-#Train/Test 분리
-max_len = len(x_data)
-df_coin_train = x_data[:int(max_len*0.7)] #Train 70% data
-df_coin_test = x_data[int(max_len*0.7):(max_len-1)] #Test 30% data
-
-# df_result_train = y_data1[:int(max_len*0.7)] #Train 70% data
-# df_result_test = y_data1[int(max_len*0.7):(max_len-1)] #Test 30% data
-df_result_train = y_data2[:int(max_len*0.7)] #Train 70% data
-df_result_test = y_data2[int(max_len*0.7):(max_len-1)] #Test 30% data
-
-print(df_coin_train.shape)
-print(df_coin_test.shape)
-print(df_result_train.shape)
-print(df_result_test.shape)
-
-
-
-# +
-#modeling_CNN  
-from tensorflow.keras.models import Sequential 
-from tensorflow.keras.layers import Dense 
-import tensorflow.keras.backend as K 
-from tensorflow.keras.layers import Dense, Conv2D, MaxPooling2D, Dropout, Flatten
-from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
-from tensorflow.keras.models import load_model
-
-EPOCHS = 100
-BATCH_SIZE = 500
-
-dt_rows = 6 #feature종류
-dt_cols = 35 #timestep
-
-input_shape = (dt_rows, dt_cols, 1)
-x_train = df_coin_train.reshape(df_coin_train.shape[0], dt_rows, dt_cols, 1)
-x_test = df_coin_test.reshape(df_coin_test.shape[0], dt_rows, dt_cols, 1)
-
-# y_train = df_result_train.reshape(df_result_train.shape[0],1,dt_cols)
-# y_test = df_result_test.reshape(df_result_test.shape[0],1,dt_cols)
-
-y_train = df_result_train
-y_train = df_result_test
-
-
-model_cnn = Sequential()
-model_cnn.add(Conv2D(32,  kernel_size=(1,1), input_shape =(dt_rows, dt_cols, 1)))
-# model_cnn.add(Conv2D(32, kernel_size=(3,3), input_shape =(dt_rows, dt_cols, 1), activation='relu'))
-model_cnn.add(Conv2D(64, kernel_size=(3,3), activation='relu'))
-model_cnn.add(MaxPooling2D(pool_size=(2,2)))
-model_cnn.add(Flatten())
-model_cnn.add(Dense(128,activation='relu'))
-model_cnn.add(Dense(257,activation='relu'))
-model_cnn.add(Dense(128,activation='relu'))
-model_cnn.add(Dropout(0.5))
-model_cnn.add(Dense(1))
-
-print(model_cnn.summary())
-
-
-# -
-
-
-model_cnn.compile(loss='mean_squared_logarithmic_error', optimizer='adam', metrics=['accuracy'])
-# model_cnn.compile(optimizer='adam')
-early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
-history_cnn = model_cnn.fit(x_train,y_train, batch_size=BATCH_SIZE, epochs=EPOCHS,verbose=1, callbacks=[early_stop])
-fnc_plot_mResult(history)
-
-
-# +
-#모델 로드
-#reconstructed_model = tf.keras.models.load_model("my_model")
-#예측 결과 확인
-pred_train_y = model_cnn.predict(x_train)
-pred_test_y = model_cnn.predict(x_test)
-# print(Train_y)
-# print(pred_train_y)
-
-plt.plot(y_train*scaling_value)
-plt.plot(pred_train_y*scaling_value)
-plt.legend(['Train_y','Pred_y'])
-plt.show()
-
-plt.plot(y_train*scaling_value)
-plt.plot(pred_test_y*scaling_value)
-plt.legend(['Test_y','Pred_y'])
-plt.show()
-# -
-
-Train_y
 
 
