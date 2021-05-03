@@ -386,7 +386,7 @@ plt.show()
 #데이터 전처리_CNN feature: 10분단위 6시간 가격데이터 
 
 #단위 수정
-scaling_value =1000000
+scaling_value =10000
 
 #Raw 데이터 불러오기
 df_coin = pd.read_csv("df_coin.csv")
@@ -432,7 +432,7 @@ np.save('y_cnn_data2',y_data2)
 
 # +
 #단위 수정
-scaling_value =1000000
+scaling_value =10000
 
 #Data 로드
 x_data = np.load('x_cnn_data.npy')
@@ -466,13 +466,25 @@ from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 from tensorflow.keras.models import load_model
 
 EPOCHS = 100
-BATCH_SIZE = 500
+BATCH_SIZE = 64
 
 dt_rows = df_coin_train.shape[1] #feature종류
 dt_cols = df_coin_train.shape[2] #timestep
 
 input_shape = (dt_rows, dt_cols, 1)
 
+
+
+
+
+
+
+# -
+
+
+# ## CNN_10min Result
+
+# +
 #Conv2D
 # x_train = df_coin_train.reshape(df_coin_train.shape[0], dt_rows, dt_cols, 1)
 # x_test = df_coin_test.reshape(df_coin_test.shape[0], dt_rows, dt_cols, 1)
@@ -502,17 +514,121 @@ y_test_1h = df_result_test_1h.reshape(df_result_test_1h.shape[0],df_result_test_
 #10min forecast
 model_cnn = Sequential()
 model_cnn.add(Conv1D(32,  kernel_size=1, input_shape =(dt_rows, dt_cols),activation='relu'))
-model_cnn.add(Conv1D(32,  kernel_size=dt_rows,activation='relu'))
+model_cnn.add(Conv1D(64,  kernel_size=dt_rows, activation='relu'))
 model_cnn.add(Flatten())
 model_cnn.add(Dense(512,activation='relu'))
 model_cnn.add(Dropout(0.2))
-model_cnn.add(Dense(128,activation='relu'))
 model_cnn.add(Dense(1))
 
-print(model_cnn.summary())
-model_cnn.compile(loss='mean_squared_error', optimizer='adam', metrics=['mae'])
+
+model_cnn.compile(loss='mae', optimizer='adam', metrics=['mean_squared_error'])
+early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
+tf.keras.optimizers.Adam(learning_rate=1e-5)
+history_cnn = model_cnn.fit(x_train,y_train,validation_data =(x_test, y_test), batch_size=BATCH_SIZE, epochs=EPOCHS,verbose=1, callbacks=[early_stop])
+
+plt.plot(history_cnn.history['loss'])
+plt.plot(history_cnn.history['val_loss'])
+plt.legend(['loss','val_loss'])
+plt.show()
+
+
+#모델 로드
+#reconstructed_model = tf.keras.models.load_model("my_model")
+#예측 결과 확인
+# pred_train_y = model_cnn.predict(x_train)
+pred_test_y = model_cnn.predict(x_test)
+print("Predict Complete!")
+
+plt.plot(y_test*scaling_value)
+plt.plot(pred_test_y*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('10min forecast_test')
+plt.show()
+
+
+plt.plot(y_test[29112:30627]*scaling_value)
+plt.plot(pred_test_y[29112:30627]*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('Problem_point_1')
+plt.show()
+
+
+plt.plot(y_test[432600:433537]*scaling_value)
+plt.plot(pred_test_y[432600:433537]*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('Problem_point_2')
+plt.show()
+
+
+
+
+
+# -
+
+# ## CNN 결과
+
+# +
+#Conv2D
+# x_train = df_coin_train.reshape(df_coin_train.shape[0], dt_rows, dt_cols, 1)
+# x_test = df_coin_test.reshape(df_coin_test.shape[0], dt_rows, dt_cols, 1)
+# y_train = df_result_train.reshape(df_result_train.shape[0],1,dt_cols)
+# y_test = df_result_test.reshape(df_result_test.shape[0],1,dt_cols)
+
+#Conv1D
+x_train = df_coin_train.reshape(df_coin_train.shape[0], dt_rows, dt_cols)
+x_test = df_coin_test.reshape(df_coin_test.shape[0], dt_rows, dt_cols)
+y_train = df_result_train
+y_test = df_result_test
+y_train_1h = df_result_train_1h.reshape(df_result_train_1h.shape[0],df_result_train_1h.shape[2])
+y_test_1h = df_result_test_1h.reshape(df_result_test_1h.shape[0],df_result_test_1h.shape[2])
+
+# model_cnn = Sequential()
+# model_cnn.add(Conv2D(32,  kernel_size=(3,3), input_shape =(dt_rows, dt_cols, 1),activation='relu'))
+# # model_cnn.add(MaxPooling2D(pool_size=(2,2)))
+# model_cnn.add(Conv2D(32, kernel_size=(3,3), activation='relu'))
+# model_cnn.add(MaxPooling2D(pool_size=(2,2)))
+# model_cnn.add(Flatten())
+# model_cnn.add(Dense(512,activation='relu'))
+# model_cnn.add(Dense(128,activation='relu'))
+# model_cnn.add(Dense(20,activation='relu'))
+# model_cnn.add(Dropout(0.5))
+# model_cnn.add(Dense(1))
+
+#10min forecast
+model_cnn = Sequential()
+model_cnn.add(Conv1D(32,  kernel_size=1, input_shape =(dt_rows, dt_cols),activation='relu'))
+model_cnn.add(Conv1D(64,  kernel_size=dt_rows, activation='relu'))
+model_cnn.add(Flatten())
+model_cnn.add(Dense(512,activation='relu'))
+model_cnn.add(Dropout(0.2))
+model_cnn.add(Dense(1))
+
+
+#1h forecast
+# model_cnn_1h = Sequential()
+# model_cnn_1h.add(Conv1D(32,  kernel_size=1, input_shape =(dt_rows, dt_cols),activation='relu'))
+# model_cnn_1h.add(Conv1D(64,  kernel_size=dt_rows,activation='relu'))
+# model_cnn_1h.add(Flatten())
+# model_cnn_1h.add(Dense(512,activation='relu'))
+# model_cnn_1h.add(Dropout(0.2))
+# model_cnn_1h.add(Dense(6))
+
+# print(model_cnn_1h.summary())
+# model_cnn_1h.compile(loss=tf.keras.losses.MeanSquaredError(), optimizer=tf.keras.optimizers.Adam())
+# early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
+# history_cnn_1h = model_cnn_1h.fit(x_train,y_train_1h,validation_data =(x_test, y_test_1h), batch_size=BATCH_SIZE, epochs=EPOCHS,callbacks= early_stop)
+
+# plt.plot(history_cnn_1h.history['loss'])
+# plt.plot(history_cnn_1h.history['val_loss'])
+# plt.legend(['loss','val_loss'])
+# plt.show()
+
+
+model_cnn.compile(loss='mae', optimizer='adam', metrics=['mean_squared_error'])
 # model_cnn.compile(optimizer='adam')
 early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
+# lr_schedule = tf.keras.callbacks.LearningRateScheduler(lambda epoch: 1e-8 * 10**(epoch / 20))
+tf.keras.optimizers.Adam(learning_rate=1e-5)
 history_cnn = model_cnn.fit(x_train,y_train,validation_data =(x_test, y_test), batch_size=BATCH_SIZE, epochs=EPOCHS,verbose=1, callbacks=[early_stop])
 # fnc_plot_mResult(history_cnn)
 
@@ -524,37 +640,7 @@ plt.show()
 
 
 
-#1h forecast
-model_cnn_1h = Sequential()
-model_cnn_1h.add(Conv1D(32,  kernel_size=1, input_shape =(dt_rows, dt_cols),activation='relu'))
-model_cnn_1h.add(Conv1D(32,  kernel_size=dt_rows,activation='relu'))
-model_cnn_1h.add(Flatten())
-model_cnn_1h.add(Dense(512,activation='relu'))
-model_cnn_1h.add(Dropout(0.2))
-model_cnn_1h.add(Dense(128,activation='relu'))
-model_cnn_1h.add(Dense(6))
 
-print(model_cnn_1h.summary())
-model_cnn_1h.compile(loss=tf.keras.losses.MeanSquaredError(), optimizer=tf.keras.optimizers.Adam())
-early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
-history_cnn_1h = model_cnn_1h.fit(x_train,y_train_1h,validation_data =(x_test, y_test_1h), batch_size=BATCH_SIZE, epochs=EPOCHS)
-
-plt.plot(history_cnn_1h.history['loss'])
-plt.plot(history_cnn_1h.history['val_loss'])
-plt.legend(['loss','val_loss'])
-plt.show()
-
-
-
-# -
-
-
-pred_test_y = model_cnn.predict(x_test)
-pred_test_y.shape
-
-pred_test_y_1h.shape
-
-# +
 #모델 로드
 #reconstructed_model = tf.keras.models.load_model("my_model")
 #예측 결과 확인
@@ -562,7 +648,7 @@ pred_test_y_1h.shape
 pred_test_y = model_cnn.predict(x_test)
 # pred_train_y = model_cnn_1h.predict(x_train)
 pred_test_y_1h = model_cnn_1h.predict(x_test)
-print("Predict Complete!")a
+print("Predict Complete!")
 
 # plt.plot(y_train)
 # plt.plot(pred_train_y)
@@ -612,6 +698,62 @@ plt.legend(['Test_y','Pred_y'])
 plt.title('Problem_point_2')
 plt.show()
 
+
+
+# -
+
+# ## CNN + LSTM 결과
+
+# +
+#CNN + LSTM
+model_cnn = Sequential()
+model_cnn.add(Conv1D(32,  kernel_size=3, input_shape =(dt_rows, dt_cols),activation='relu'))
+# model_cnn.add(Conv1D(64,  kernel_size=3,activation='relu'))
+model_cnn.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(32)))
+model_cnn.add(Dense(512,activation='relu'))
+model_cnn.add(Dropout(0.2))
+model_cnn.add(Dense(128,activation='relu'))
+model_cnn.add(Dropout(0.2))
+model_cnn.add(Dense(1))
+print(model_cnn.summary())
+
+model_cnn.compile(loss='mae', optimizer='adam', metrics=['mean_squared_error'])
+early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
+# lr_schedule = tf.keras.callbacks.LearningRateScheduler(lambda epoch: 1e-8 * 10**(epoch / 20))
+tf.keras.optimizers.Adam(learning_rate=1e-5)
+history_cnn = model_cnn.fit(x_train,y_train,validation_data =(x_test, y_test), batch_size=BATCH_SIZE, epochs=EPOCHS,verbose=1, callbacks=[early_stop])
+# plt.semilogx(history_cnn.history["lr"], history_cnn.history["loss"])
+
+
+plt.plot(history_cnn.history['loss'])
+plt.plot(history_cnn.history['val_loss'])
+plt.legend(['loss','val_loss'])
+plt.show()
+
+#예측 결과 확인
+# pred_train_y = model_cnn.predict(x_train)
+pred_test_y = model_cnn.predict(x_test)
+print("Predict Complete!")
+
+plt.plot(y_test*scaling_value)
+plt.plot(pred_test_y*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('10min forecast_test')
+plt.show()
+
+
+plt.plot(y_test[29112:30627]*scaling_value)
+plt.plot(pred_test_y[29112:30627]*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('Problem_point_1')
+plt.show()
+
+
+plt.plot(y_test[432600:433537]*scaling_value)
+plt.plot(pred_test_y[432600:433537]*scaling_value)
+plt.legend(['Test_y','Pred_y'])
+plt.title('Problem_point_2')
+plt.show()
 
 
 # -
