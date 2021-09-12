@@ -140,7 +140,7 @@ for col in lst_cols:
 
 plt.legend(title="Attacked")
 plt.show()
-        
+
 
 # +
 import warnings
@@ -210,18 +210,84 @@ df_anova[df_anova['P-value']<0.05]
 # (신규) C16, C24, C31, C32, C43(일부), C59, C68, C70, C71(일부), C73, C75, C76, C77, C84
 
 # +
+#데이터 전처리
 df_train['attack'] = 0
-df_valid['timestamp'] = pd.to_datetime(df_valid['timestamp'])
-df_train['timestamp'] = pd.to_datetime(df_train['timestamp'])
-df_test['timestamp'] = pd.to_datetime(df_test['timestamp'])
-df_tot =  pd.concat([df_train,df_valid])
+df_test['attack'] = 9
+df_train['group'] = 'train'
+df_valid['group'] = 'valid'
+df_test['group'] = 'test'
 
-lst_cols = df_tot.columns.difference(['timestamp','attack'])
+df_tot =  pd.concat([df_train,df_valid,df_test])
+df_tot['group'] = df_tot['group']+df_tot['attack'].astype('str')
+df_tot = df_tot.sort_values('timestamp')
+df_tot=df_tot.reset_index(drop=True)
+df_tot['index'] = df_tot.index
+lst_cols = df_tot.columns.difference(['timestamp','attack','group','index'])
+print(lst_cols)
+df_tot.head(10)
+# -
+# ### 전체 기간 트렌드 확인(train-valid-valid::attack-test)
+# 변수의 트랜드가 특정기간동안 flat하거나 test기간동안 변화가없는 변수는 제거 하도록함<br>
+# :C08, C09, C10, C17, C18, C19, C22, C26, C29, C34, C36, C38, C39, C46, C48, C49, C52, C55, C61, C63, C64, C79, C82, C85
+# Test기간에 이상징후가 보이는 컬럼 추가 <br>
+# :C01, C02, C07, C12, C16, C24, C30, C32, C41, C43, C44, C62
+
+    #전체구간 대비 장애 구간시 이상점 파악
+    #Test기간에 이상징후가 보이는 컬럼 추가 : C01, C02, C07, C12, C16, C24, C30, C32, C41, C43, C44, C62
+    #Flat 한 변수 제거 : C08, C09, C10, C17, C18, C19, C22, C26, C29, C34, C36, C38, C39, C46, C48, C49, C52, C55, C61, C63, C64, C79, C82, C85
+    for col in lst_cols:
+        plt.figure(figsize=(20, 4))
+        plt.title(col)
+        plt.scatter(pd.to_datetime(df_tot[df_tot['group']=='train0']['timestamp']), df_tot[df_tot['group']=='train0'][col], s=0.2,color='k',label='train')
+        plt.scatter(pd.to_datetime(df_tot[df_tot['group']=='valid0']['timestamp']), df_tot[df_tot['group']=='valid0'][col], s=0.2,color='blue',label='valid0')
+        plt.scatter(pd.to_datetime(df_tot[df_tot['group']=='valid1']['timestamp']), df_tot[df_tot['group']=='valid1'][col], s=1,color='red',label='valid1')
+        plt.scatter(pd.to_datetime(df_tot[df_tot['group']=='test9']['timestamp']), df_tot[df_tot['group']=='test9'][col], s=0.2,color='purple',label='test9')
+        plt.legend(loc = 'upper right')
+        plt.show()
+
+# +
+#전체구간 대비 장애 구간시 이상점 파악(x축 index 로 차트 확인)
+
 for col in lst_cols:
-    sns.set(style="darkgrid")
-    sns.relplot(x='timestamp', y=col ,hue = 'attack', data=df_valid, height=7,aspect =4/1)
- 
+    plt.figure(figsize=(20, 4))
+    plt.title(col)
+    plt.scatter(df_tot[df_tot['group']=='train0']['index'], df_tot[df_tot['group']=='train0'][col], s=0.2,color='k',label='train')
+    plt.scatter(df_tot[df_tot['group']=='valid0']['index'], df_tot[df_tot['group']=='valid0'][col], s=0.2,color='blue',label='valid0')
+    plt.scatter(df_tot[df_tot['group']=='valid1']['index'], df_tot[df_tot['group']=='valid1'][col], s=1,color='red',label='valid1')
+    plt.scatter(df_tot[df_tot['group']=='test9']['index'], df_tot[df_tot['group']=='test9'][col], s=0.2,color='purple',label='test9')
+    plt.legend(loc = 'upper right')
+    plt.show()
+# +
+#장애 구간만 확대해서 확인
+#장애구간에 이상점이 보이는 컬럼 찾기
+#C03, C12, C16, C24, C31, C32, C43, C60, C68, C70, C71, C73, C75, C76, C77, C84
 
+#필요 컬럼만 필터링(flat한 컬럼 필터링)
+lst_new_cols = set(lst_cols).difference(set(['C08', 'C09', 'C10', 'C17', 'C18', 'C19', 'C22', 'C26', 'C29', 'C34', 'C36', 'C38', 'C39', 'C46', 'C48', 'C49', 'C52', 'C55', 'C61', 'C63', 'C64', 'C79', 'C82', 'C85']))
+lst_new_cols= sorted(lst_new_cols)
+for col in lst_new_cols:
+    plt.figure(figsize=(20, 4))
+    plt.title(col)
+#     plt.scatter(df_tot[df_tot['group']=='train0']['index'], df_tot[df_tot['group']=='train0'][col], s=0.2,color='k',label='train')
+    plt.scatter(df_tot[df_tot['group']=='valid0']['index'], df_tot[df_tot['group']=='valid0'][col], s=0.2,color='blue',label='valid0')
+    plt.scatter(df_tot[df_tot['group']=='valid1']['index'], df_tot[df_tot['group']=='valid1'][col], s=2,color='red',label='valid1')
+#     plt.scatter(df_tot[df_tot['group']=='test9']['index'], df_tot[df_tot['group']=='test9'][col], s=0.2,color='purple',label='test9')
+    plt.legend(loc = 'upper right')
+    plt.show()
+# -
+
+
+#필터링된 컬럼들만 트랜드 확인
+lst_features = ['C01', 'C02', 'C07', 'C30', 'C41', 'C44', 'C62', 'C03', 'C12', 'C16', 'C24', 'C31', 'C32', 'C43', 'C60', 'C68', 'C70', 'C71', 'C73', 'C75', 'C76', 'C77', 'C84']
+for col in lst_features:
+    plt.figure(figsize=(20, 4))
+    plt.title(col)
+    plt.scatter(pd.to_datetime(df_tot[df_tot['group']=='train0']['timestamp']), df_tot[df_tot['group']=='train0'][col], s=0.2,color='k',label='train')
+    plt.scatter(pd.to_datetime(df_tot[df_tot['group']=='valid0']['timestamp']), df_tot[df_tot['group']=='valid0'][col], s=0.2,color='blue',label='valid0')
+    plt.scatter(pd.to_datetime(df_tot[df_tot['group']=='valid1']['timestamp']), df_tot[df_tot['group']=='valid1'][col], s=1,color='red',label='valid1')
+    plt.scatter(pd.to_datetime(df_tot[df_tot['group']=='test9']['timestamp']), df_tot[df_tot['group']=='test9'][col], s=0.2,color='purple',label='test9')
+    plt.legend(loc = 'upper right')
+    plt.show()
 
 # +
 #변화량 트렌드 확인
@@ -250,24 +316,3 @@ for col in lst_cols:
 del(df_trend)
 gc.collect()
 #C01,C02,C07,C10(일부),C13,C15,C26,C27,C32,C44(일부),C45,C46(일부),C47,C49,C55,C66,C70,C72,C73,C75
-# +
-
-lst_features = df_train.columns.difference(['timestamp','attack'])
-scaler = MinMaxScaler()
-scaler.fit(df_train[lst_features])
-
-df_m_vld = pd.DataFrame(scaler.transform(df_valid[lst_features]), columns=lst_features, index = df_valid.index) #feature scaling
-df_m_vld = pd.concat([df_valid[['timestamp','attack']],df_m_vld],axis =1) #concat time tag,attack
-
-
-lst_cols = df_tot.columns.difference(['timestamp','attack'])
-for col in lst_cols:
-    sns.set(style="darkgrid")
-    sns.relplot(x='index', y=col ,hue = 'attack', data=df_m_vld.reset_index(), height=7,aspect =4/1)
- 
-# -
-
-
-
-
-

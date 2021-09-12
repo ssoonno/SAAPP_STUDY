@@ -69,7 +69,11 @@ print('Test3 rows: ',len(df_test3))
 #중요 변수 C01,C02,C07,C10(일부),C13,C15,C26,C27,C32,C44(일부),C45,C46(일부),C47,C49,C55,C66,C70,C72,C73,C75
 str_target = 'attack'
 # lst_features = ['C01','C02','C07','C10','C13','C15','C26','C27','C32','C44','C45','C46','C47','C49','C55','C66','C70','C72','C73','C75']
-lst_features = [ 'C16', 'C24', 'C31', 'C32', 'C43', 'C59', 'C68', 'C70', 'C71', 'C73', 'C75', 'C76', 'C77', 'C84']
+# lst_features = [ 'C16', 'C24', 'C31', 'C32', 'C43', 'C59', 'C68', 'C70', 'C71', 'C73', 'C75', 'C76', 'C77', 'C84']
+# lst_features = df_train.columns.difference(['index','timestamp','attack'])
+# lst_features = set(lst_features).difference(set(['C08', 'C09', 'C10', 'C17', 'C18', 'C19', 'C22', 'C26', 'C29', 'C34', 'C36', 'C38', 'C39', 'C46', 'C48', 'C49', 'C52', 'C55', 'C61', 'C63', 'C64', 'C79', 'C82', 'C85']))
+lst_features = ['C01', 'C02', 'C07', 'C30', 'C41', 'C44', 'C62', 'C03', 'C12', 'C16', 'C24', 'C31', 'C32', 'C43', 'C60', 'C68', 'C70', 'C71', 'C73', 'C75', 'C76', 'C77', 'C84']
+print('Feature list length:',len(lst_features))
 
 scaler = MinMaxScaler()
 scaler.fit(df_train[lst_features])
@@ -90,6 +94,23 @@ df_m_ts2 = pd.concat([df_test2[['timestamp']],df_m_ts2],axis = 1) #concat time t
 df_m_ts3 = pd.DataFrame(scaler.transform(df_test3[lst_features]), columns = lst_features, index=df_test3.index) #feature scaling
 df_m_ts3 = pd.concat([df_test3[['timestamp']],df_m_ts3],axis = 1) #concat time tag
 
+# # Create diff value
+# for col in lst_features:
+#     df_m_tr[col+'_diff']= df_m_tr[col] -df_m_tr[col].shift(1)
+#     df_m_vld[col+'_diff']= df_m_vld[col] -df_m_vld[col].shift(1)
+#     df_m_ts1[col+'_diff']= df_m_ts1[col] -df_m_ts1[col].shift(1)
+#     df_m_ts2[col+'_diff']= df_m_ts2[col] -df_m_ts2[col].shift(1)
+#     df_m_ts3[col+'_diff']= df_m_ts3[col] -df_m_ts3[col].shift(1)
+
+df_m_tr = df_m_tr.fillna(0)
+df_m_vld = df_m_vld.fillna(0)
+df_m_ts1 = df_m_ts1.fillna(0)
+df_m_ts2 = df_m_ts2.fillna(0)
+df_m_ts3 = df_m_ts3.fillna(0)
+
+lst_features = df_m_tr.columns.difference(['index','timestamp','attack'])
+
+
 np_tr = df_m_tr[lst_features].to_numpy()
 np_tr_1 = np_tr[:int(np_tr.shape[0]*0.8)]
 np_tr_2 = np_tr[int(np_tr.shape[0]*0.8):]
@@ -99,6 +120,7 @@ np_ts2 = df_m_ts2[lst_features].to_numpy()
 np_ts3 = df_m_ts3[lst_features].to_numpy()
 
 del([df_train,df_valid,df_test1,df_test2,df_test3])
+print(np_tr.shape)
 
 
 # -
@@ -116,7 +138,7 @@ import matplotlib.pyplot as plt
 # mlcompute.set_mlc_device(device_name='cpu')
 
 EPOCHS = 100
-BATCH_SIZE = 512 #24*3
+BATCH_SIZE = 60*30 #24*3
 
 #V01
 # simple_AE = Sequential()
@@ -143,18 +165,74 @@ BATCH_SIZE = 512 #24*3
 # simple_AE.summary()
 
 #V03
+# simple_AE = Sequential()
+# simple_AE.add(Dense(256,input_dim=(np_tr.shape[1])))
+# simple_AE.add(Dense(512,activation = 'relu'))
+# simple_AE.add(Dense(1024,activation = 'relu'))
+# simple_AE.add(Dense(512,activation = 'relu'))
+# simple_AE.add(Dense(256,activation = 'relu'))
+# simple_AE.add(Dense(np_tr.shape[1]))
+# simple_AE.summary()
+
+
+#V04
+# simple_AE = Sequential()
+# simple_AE.add(Dense(256,input_dim=(np_tr.shape[1])))
+# simple_AE.add(Dense(1024,activation = 'relu'))
+# simple_AE.add(Dense(2048,activation = 'relu'))
+# simple_AE.add(Dense(1024,activation = 'relu'))
+# simple_AE.add(Dense(256,activation = 'relu'))
+# simple_AE.add(Dense(np_tr.shape[1]))
+# simple_AE.summary()
+
+#V05(+diff_tag)
+# simple_AE = Sequential()
+# simple_AE.add(Dense(256,input_dim=(np_tr.shape[1])))
+# simple_AE.add(Dense(512,activation = 'relu'))
+# simple_AE.add(Dense(1024,activation = 'relu'))
+# simple_AE.add(Dense(512,activation = 'relu'))
+# simple_AE.add(Dense(256,activation = 'relu'))
+# simple_AE.add(Dense(np_tr.shape[1]))
+# simple_AE.summary()
+
+
+
+# #V06(all tag)
+# simple_AE = Sequential()
+# simple_AE.add(Dense(512,input_dim=(np_tr.shape[1])))
+# simple_AE.add(Dense(1024,activation = 'relu'))
+# simple_AE.add(Dense(2048,activation = 'relu'))
+# simple_AE.add(Dense(1024,activation = 'relu'))
+# simple_AE.add(Dense(512,activation = 'relu'))
+# simple_AE.add(Dense(np_tr.shape[1]))
+# simple_AE.summary()
+
+# #V07
+# simple_AE = Sequential()
+# simple_AE.add(Dense(512,input_dim=(np_tr.shape[1])))
+# simple_AE.add(Dense(1024,activation = 'relu'))
+# simple_AE.add(Dense(2048,activation = 'relu'))
+# simple_AE.add(Dense(1024,activation = 'relu'))
+# simple_AE.add(Dense(512,activation = 'relu'))
+# simple_AE.add(Dense(np_tr.shape[1]))
+# simple_AE.summary()
+
+#V08
 simple_AE = Sequential()
-simple_AE.add(Dense(256,input_dim=(np_tr.shape[1])))
-simple_AE.add(Dense(512,activation = 'relu'))
+simple_AE.add(Dense(512,input_dim=(np_tr.shape[1])))
+simple_AE.add(Dense(1024,activation = 'relu'))
+simple_AE.add(Dense(2048,activation = 'relu'))
+simple_AE.add(Dense(4096,activation = 'relu'))
+simple_AE.add(Dense(2048,activation = 'relu'))
 simple_AE.add(Dense(1024,activation = 'relu'))
 simple_AE.add(Dense(512,activation = 'relu'))
-simple_AE.add(Dense(256,activation = 'relu'))
 simple_AE.add(Dense(np_tr.shape[1]))
 simple_AE.summary()
 
 
+
 adam = tf.keras.optimizers.Adam()
-simple_AE.compile(loss='mse',optimizer=adam)
+simple_AE.compile(loss='mae',optimizer=adam)
 early_stop = EarlyStopping(monitor='val_loss', patience=10)
 history_simple_AE = simple_AE.fit(np_tr_1,np_tr_1,validation_data=(np_tr_2,np_tr_2), batch_size=BATCH_SIZE, epochs=EPOCHS, callbacks=[early_stop])
 
@@ -172,7 +250,7 @@ simple_AE.save('model/Simple_AE.h5') #model save
 import seaborn as sns
 from tensorflow.keras.models import load_model
 
-# simple_AE = load_model('model/Simple_AE.h5')
+simple_AE = load_model('model/Simple_AE.h5')
 np_vld_pred = simple_AE.predict(np_vld)
 print('Total MAE:',np.mean(np.abs(np_vld - np_vld_pred)))
 print('Feature MAE:',np.mean(np.abs(np_vld - np_vld_pred),axis =0))
@@ -183,7 +261,7 @@ df_vld_result = pd.concat([pd.DataFrame(data = np.abs(np_vld - np_vld_pred),colu
 df_vld_result =pd.concat([df_m_vld[['timestamp','attack']],df_vld_result],axis =1)
 df_vld_result = df_vld_result.sort_values('timestamp')
 sns.relplot(x='index', y = 'TOT_MAE', hue = 'attack', data =df_vld_result.reset_index(),height=7, aspect = 4/1)
-
+# sns.scatterplot(x='index',y='TOT_MAE', hue='attack', data = df_vld_result.reset_index(), height=7)
 # del([df_m_tr,df_m_vld])
 # del(np_vld,np_vld_pred)
 # -
@@ -216,7 +294,7 @@ print(df_model_result)
 
 threshold = df_model_result[df_model_result['TaPR'] == df_model_result['TaPR'].max()]['Threshold'].values[0]
 print('Best threshold is ',round(threshold,3))
-
+print(df_model_result[df_model_result['Threshold']==threshold]) 
 # del(df_vld_result)
 # -
 # ### Predict test data & make submission dataframe
@@ -238,27 +316,37 @@ df_result_ts3 = pd.concat([pd.DataFrame(data = np.abs(np_ts3 - np_result_ts3),co
                           pd.DataFrame(data = np.mean(np.abs(np_ts3 - np_result_ts3),axis =1), columns = ['mae'])],axis =1)
 df_result_ts3 =pd.concat([df_m_ts3['timestamp'],df_result_ts3['mae']],axis =1)
 
-# df_submission_org = pd.read_csv('data/sample_submission.csv')
+df_submission_org = pd.read_csv('data/sample_submission.csv')
 df_submission = pd.concat([df_result_ts1,df_result_ts2,df_result_ts3])
 df_submission = df_submission.reset_index()
 df_submission['attack'] = df_submission.apply(lambda x : 1 if x['mae']>threshold else 0 ,axis =1)
-df_submission = df_submission[['timestamp','attack']]
-# df_submission = pd.merge(df_submission,df_submission_org['timestamp'])
-df_submission.to_csv('result_SimpleAE_v03_3.csv',index = False)
+sns.relplot(x = 'index', y ='mae', hue='attack',  data =df_submission.reset_index(), height=7, aspect = 4/1)
+print('Examle submission : ',len(df_submission),'Created submission : ',len(df_submission_org))
+
+# df_submission = df_submission[['timestamp','attack']]
+# df_submission.to_csv('result_SimpleAE_v03_3.csv',index = False)
 print("Model result save Done")
 # -
 
 
-df_submission = pd.concat([df_result_ts1,df_result_ts2,df_result_ts3,df_result_ts2])
-df_submission = df_submission.reset_index(drop=True)
-df_submission.columns =['timestamp', 'mae'] 
-df_submission_org['timestamp'] = df_submission_org['timestamp'].astype('string')
-df_submission['timestamp'] = df_submission['timestamp'].astype('string')
-print(len(df_submission))
-print(len(df_submission_org))
-print(len(pd.merge(df_submission,df_submission_org,on='timestamp')))
-print(df_submission.head(3))
-print(df_submission_org.head(3))
+df_submission = df_submission[['timestamp','attack']]
+df_submission.to_csv('result_SimpleAE_v08.csv',index = False)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -361,10 +449,6 @@ plt.legend(['loss','val_loss'])
 plt.show()
 
 TimeLag_AE.save('model/TimeLag_AE.h5') #model save
-# -
-
-del([np_tr,np_tr_1,np_tr_2])
-g
 
 # +
 import seaborn as sns
