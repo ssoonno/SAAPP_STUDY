@@ -7,11 +7,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.9.1
+#       jupytext_version: 1.11.4
 #   kernelspec:
-#     display_name: tf_env
+#     display_name: Python 3 (ipykernel)
 #     language: python
-#     name: tf_env
+#     name: python3
 # ---
 
 # # Coin Trading
